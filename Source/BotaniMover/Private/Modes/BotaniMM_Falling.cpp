@@ -5,6 +5,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "BotaniMoverInputs.h"
+#include "BotaniMoverLogChannels.h"
 #include "BotaniMoverSettings.h"
 #include "Components/BotaniMoverComponent.h"
 
@@ -152,8 +153,8 @@ void UBotaniMM_Falling::GenerateMove_Implementation(
 		Params.MaxSpeed = CommonLegacySettings->MaxSpeed;
 		Params.Acceleration = CommonLegacySettings->Acceleration;
 		Params.Deceleration = CommonLegacySettings->Deceleration;
-		//Params.WorldToGravityQuat = BotaniMover->GetWorldToGravityTransform();
-		//Params.bUseAccelerationForVelocityMove = CommonLegacySettings->bUseAccelerationForVelocityMove;
+		Params.WorldToGravityQuat = BotaniMover->GetWorldToGravityTransform();
+		Params.bUseAccelerationForVelocityMove = CommonLegacySettings->bUseAccelerationForVelocityMove;
 	}
 
 	// Apply the air control
@@ -303,7 +304,11 @@ void UBotaniMM_Falling::ApplyMovement(FMoverTickEndData& OutputState)
 				? FColor::Red
 				: FColor::Green;
 
-			//UE_VLOG_ARROW(this, VLog)@TODO
+			UE_VLOG_ARROW(this, VLogBotaniMover, Log, FallData.MoveHitResult.TraceStart, ArrowEnd, ArrowColor,
+				TEXT("Fall\nStart[%s]\nEnd[%s]\nPct[%f]"),
+				*FallData.MoveHitResult.TraceStart.ToCompactString(),
+				*ArrowEnd.ToCompactString(),
+				FallData.PercentTimeAppliedSoFar);
 		}
 #endif
 

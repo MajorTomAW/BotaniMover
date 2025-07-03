@@ -1,7 +1,7 @@
 ﻿// Copyright © 2025 Playton. All Rights Reserved.
 
 
-#include "Transitions/BotaniMT_Jump.h"
+#include "Transitions/BotaniMMT_Jump.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "CommonBlackboard.h"
@@ -16,9 +16,9 @@
 #include "MoveLibrary/FloorQueryUtils.h"
 
 
-#include UE_INLINE_GENERATED_CPP_BY_NAME(BotaniMT_Jump)
+#include UE_INLINE_GENERATED_CPP_BY_NAME(BotaniMMT_Jump)
 
-UBotaniMT_Jump::UBotaniMT_Jump(const FObjectInitializer& ObjectInitializer)
+UBotaniMMT_Jump::UBotaniMMT_Jump(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	bJumpWhenButtonPressed = true;
@@ -31,7 +31,7 @@ UBotaniMT_Jump::UBotaniMT_Jump(const FObjectInitializer& ObjectInitializer)
 	bKeepPreviousVerticalVelocity = true;
 }
 
-FTransitionEvalResult UBotaniMT_Jump::Evaluate_Implementation(
+FTransitionEvalResult UBotaniMMT_Jump::Evaluate_Implementation(
 	const FSimulationTickParams& Params) const
 {
 	// Get the inputs
@@ -116,7 +116,7 @@ FTransitionEvalResult UBotaniMT_Jump::Evaluate_Implementation(
 	return FTransitionEvalResult(JumpMovementMode);
 }
 
-void UBotaniMT_Jump::Trigger_Implementation(
+void UBotaniMMT_Jump::Trigger_Implementation(
 	const FSimulationTickParams& Params)
 {
 	// Get the movement settings
@@ -165,8 +165,8 @@ void UBotaniMT_Jump::Trigger_Implementation(
 	// Should we reset the vertical velocity?
 	if (!bKeepPreviousVerticalVelocity)
 	{
-		//ClampedVelocity = FVector::VectorPlaneProject(ClampedVelocity, Params.MovingComps.MoverComponent->GetUpDirection());
-		ClampedVelocity.Z = 0.f; // Reset the vertical component
+		ClampedVelocity = FVector::VectorPlaneProject(ClampedVelocity, Params.MovingComps.MoverComponent->GetUpDirection());
+		//ClampedVelocity.Z = 0.f; // Reset the vertical component
 	}
 
 	if (MaxPreviousVelocity >= 0.f)

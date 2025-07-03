@@ -14,6 +14,7 @@ namespace BotaniMover::ModeNames
 {
 	const FName NAME_Grappling = TEXT("Grappling");
 	const FName NAME_Teleport = TEXT("Teleport");
+	const FName NAME_WallRunning = TEXT("WallRunning");
 }
 
 /** BotaniMover-specific blackboard keys. */

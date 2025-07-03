@@ -6,16 +6,16 @@
 #include "MovementModeTransition.h"
 #include "GameplayTagContainer.h"
 
-#include "BotaniMT_Jump.generated.h"
+#include "BotaniMMT_Jump.generated.h"
 
 /** Handles movement mode transitions due to jump inputs. */
-UCLASS(DisplayName="Botani: Jump Transition")
-class BOTANIMOVER_API UBotaniMT_Jump : public UBaseMovementModeTransition
+UCLASS(DisplayName="Botani MMT: Jumping")
+class UBotaniMMT_Jump : public UBaseMovementModeTransition
 {
 	GENERATED_BODY()
 
 public:
-	UBotaniMT_Jump(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	UBotaniMMT_Jump(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	//~ Begin UBaseMovementModeTransition Interface
 	virtual FTransitionEvalResult Evaluate_Implementation(const FSimulationTickParams& Params) const override;
