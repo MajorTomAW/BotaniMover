@@ -1,13 +1,14 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ScalableFloat.h"
 #include "DefaultMovementSet/LayeredMoves/MultiJumpLayeredMove.h"
 
 #include "BotaniLM_MultiJump.generated.h"
 
-USTRUCT(BlueprintType)
+USTRUCT(BlueprintType, DisplayName="Botani LM: Multi Jump")
 struct BOTANIMOVER_API FBotaniLM_MultiJump : public FLayeredMove_MultiJump
 {
 	GENERATED_BODY()
@@ -36,8 +37,8 @@ public:
 	FVector Momentum;
 
 	/** Air control percentage during the jump */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mover)
-	float AirControl;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mover, meta=(DisplayName="Air Control (%)"))
+	FScalableFloat AirControl;
 
 	/** If true, the layered move will end if the player releases the jump button */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mover)
@@ -49,5 +50,5 @@ public:
 
 	/** If true, the layered move will override the vertical velocity with the provided Momentum */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mover)
-	bool bOverrideVerticalMomentum; 
+	bool bOverrideVerticalMomentum;
 };

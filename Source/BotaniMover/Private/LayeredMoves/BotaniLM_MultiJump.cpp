@@ -1,14 +1,17 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 
 #include "LayeredMoves/BotaniLM_MultiJump.h"
 
+#include "BotaniCommonMovementSettings.h"
+#include "BotaniMoverAbilityInputs.h"
+#include "BotaniMoverSettings.h"
+#include "BotaniMoverVLogHelpers.h"
 #include "MoverComponent.h"
 #include "MoverDataModelTypes.h"
 #include "MoverSimulationTypes.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 #include "MoveLibrary/MoverBlackboard.h"
-#include "DefaultMovementSet/Settings/CommonLegacyMovementSettings.h"
 
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(BotaniLM_MultiJump)
@@ -43,7 +46,7 @@ void FBotaniLM_MultiJump::NetSerialize(FArchive& Ar)
 	Super::NetSerialize(Ar);
 
 	Ar << Momentum;
-	Ar << AirControl;
+	Ar << AirControl.Value; //@TODO: Need to properly serialize FScalableFloat ??
 	Ar << bTruncateOnJumpRelease;
 	Ar << bOverrideHorizontalMomentum;
 	Ar << bOverrideVerticalMomentum;
@@ -51,7 +54,7 @@ void FBotaniLM_MultiJump::NetSerialize(FArchive& Ar)
 
 FString FBotaniLM_MultiJump::ToSimpleString() const
 {
-	return FString::Printf(TEXT("Botani-LM MultiJump"));
+	return FString::Printf(TEXT("Botani LM: Multi-Jump"));
 }
 
 void FBotaniLM_MultiJump::AddReferencedObjects(class FReferenceCollector& Collector)
@@ -71,39 +74,75 @@ bool FBotaniLM_MultiJump::PerformJump(
 	FProposedMove& OutProposedMove)
 {
 	TimeOfLastJumpMS = TimeStep.BaseSimTimeMs;
-	if (const TObjectPtr<const UCommonLegacyMovementSettings> CommonLegacySettings = MoverComp->FindSharedSettings<UCommonLegacyMovementSettings>())
+	if (const TObjectPtr<const UBotaniMoverSettings> BotaniMoverSettings = MoverComp->FindSharedSettings<UBotaniMoverSettings>())
 	{
-		OutProposedMove.PreferredMode = CommonLegacySettings->AirMovementModeName;
+		OutProposedMove.PreferredMode = BotaniMoverSettings->AirMovementModeName;
 	}
 
 	const FVector UpDir = MoverComp->GetUpDirection();
 
-	const FVector ImpulseVelocity = bOverrideVerticalMomentum
-		? UpDir * UpwardsSpeed
+	// We can either override vertical velocity with the provided momentum or grab it from the sync state.
+	FVector UpwardsVelocity = bOverrideVerticalMomentum
+		? Momentum.ProjectOnToNormal(UpDir)
 		: SyncState->GetVelocity_WorldSpace().ProjectOnToNormal(UpDir);
+
+	// We can either override move plane velocity with the provided momentum or grab it from the sync state.
+	const FVector PlaneVelocity = bOverrideHorizontalMomentum
+		? Momentum - UpwardsVelocity
+		: SyncState->GetVelocity_WorldSpace() - UpwardsVelocity;
+
+	// Apply the upwards speed to the upwards velocity
+	UpwardsVelocity += UpDir * UpwardsSpeed;
+
+	// Calculate the final impulse
+	const FVector ImpulseVelocity = UpwardsVelocity + PlaneVelocity;
 
 	switch (MixMode)
 	{
 	case EMoveMixMode::AdditiveVelocity:
 		{
 			OutProposedMove.LinearVelocity = ImpulseVelocity;
+#if ENABLE_VISUAL_LOG
+			{
+				using namespace BotaniMover::VLog;
+				VisLogCommand(MoverComp->GetOwner(),
+					FVLogDrawCommand::DrawArrow(
+						SyncState->GetLocation_WorldSpace(),
+						SyncState->GetLocation_WorldSpace() + ImpulseVelocity,
+						FColor::Purple));
+			}
+#endif
 			break;
 		}
-		
+
 	case EMoveMixMode::OverrideAll:
 	case EMoveMixMode::OverrideVelocity:
 		{
 			// Jump impulse overrides vertical velocity while maintaining the rest
 			const FVector PriorVelocityWS = SyncState->GetVelocity_WorldSpace();
-			
+
 			const FVector StartingNonUpwardsVelocity = bOverrideHorizontalMomentum
 				? PriorVelocityWS - PriorVelocityWS.ProjectOnToNormal(UpDir)
 				: PriorVelocityWS - ImpulseVelocity;
 
 			OutProposedMove.LinearVelocity = StartingNonUpwardsVelocity + ImpulseVelocity;
+#if ENABLE_VISUAL_LOG
+			{
+				using namespace BotaniMover::VLog;
+				VisLogCommand(MoverComp->GetOwner(),
+					FVLogDrawCommand::DrawArrow(
+						SyncState->GetLocation_WorldSpace(),
+						SyncState->GetLocation_WorldSpace() + ImpulseVelocity + StartingNonUpwardsVelocity,
+						FColor::Purple));
+				VisLogCommand(MoverComp->GetOwner(),
+					FVLogDrawCommand::DrawDebugCapsule(MoverComp->GetUpdatedComponent(),
+						FColor::Green,
+						MoverComp->GetUpdatedComponent()->GetComponentQuat()));
+			}
+#endif
 			break;
 		}
-		
+
 	default:
 		ensureMsgf(false, TEXT("Multi-Jump layered move has an invalid MixMode and will do nothing."));
 		return false;
@@ -119,16 +158,16 @@ bool FBotaniLM_MultiJump::GenerateMove(
 	UMoverBlackboard* SimBlackboard,
 	FProposedMove& OutProposedMove)
 {
-	const UCommonLegacyMovementSettings* CommonLegacySettings = MoverComp->FindSharedSettings<UCommonLegacyMovementSettings>();
-	check(CommonLegacySettings);
+	const UBotaniMoverSettings* BotaniMoverSettings = MoverComp->FindSharedSettings<UBotaniMoverSettings>();
+	check(BotaniMoverSettings);
 
 	const FMoverDefaultSyncState* SyncState = StartState.SyncState.SyncStateCollection.FindDataByType<FMoverDefaultSyncState>();
 	check(SyncState);
-	
-	const FCharacterDefaultInputs* CharacterInputs = StartState.InputCmd.InputCollection.FindDataByType<FCharacterDefaultInputs>();
+
+	const FBotaniMoverAbilityInputs* BotaniAbilityInputs = StartState.InputCmd.InputCollection.FindDataByType<FBotaniMoverAbilityInputs>();
 
 	// if we're no longer falling, set the duration to zero
-	if (TimeStep.BaseSimTimeMs != StartSimTimeMs && StartState.SyncState.MovementMode != CommonLegacySettings->AirMovementModeName)
+	if (TimeStep.BaseSimTimeMs != StartSimTimeMs && StartState.SyncState.MovementMode != BotaniMoverSettings->AirMovementModeName)
 	{
 		DurationMs = 0.0f;
 	}
@@ -142,9 +181,9 @@ bool FBotaniLM_MultiJump::GenerateMove(
 	{
 		JumpsInAirRemaining = MaximumInAirJumps;
 	}
-	
+
 	bool bPerformedJump = false;
-	if (CharacterInputs && CharacterInputs->bIsJumpJustPressed)
+	if (BotaniAbilityInputs && BotaniAbilityInputs->bJumpPressedThisFrame)
 	{
 		if (StartSimTimeMs == TimeStep.BaseSimTimeMs)
 		{
@@ -174,9 +213,9 @@ bool FBotaniLM_MultiJump::GenerateMove(
 		OutProposedMove.MixMode = EMoveMixMode::AdditiveVelocity;
 
 		// if we're no longer pressing jump, set the duration to zero to end the upwards impulse
-		if (!CharacterInputs || !CharacterInputs->bIsJumpPressed)
+		if (!BotaniAbilityInputs || !BotaniAbilityInputs->bIsJumpPressed)
 		{
-			DurationMs = 0.0f;	
+			DurationMs = 0.0f;
 		}
 	}
 

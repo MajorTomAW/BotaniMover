@@ -1,14 +1,19 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 
 #include "Modes/BotaniMM_Walking.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
+#include "BotaniCommonMovementSettings.h"
+#include "BotaniMoverAbilityInputs.h"
 #include "BotaniMoverInputs.h"
+#include "BotaniMoverLogChannels.h"
+#include "BotaniMoverSettings.h"
 #include "BotaniMoverTags.h"
 #include "MoverComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Components/BotaniMoverComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "MoveLibrary/GroundMovementUtils.h"
 #include "MoveLibrary/MovementUtils.h"
 
@@ -18,16 +23,8 @@
 UBotaniMM_Walking::UBotaniMM_Walking(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	SlopeBoostMultiplier = 1.f;
-	
 	ModeTag = BotaniGameplayTags::Mover::Modes::TAG_MM_Walking;
 	SprintingTag = BotaniGameplayTags::Mover::Modes::TAG_MM_Sprinting;
-	
-	Sprint_MaxSpeed = 1000.f;
-	Sprint_Acceleration = 4000.f;
-	Sprint_Deceleration = 200.f;
-	Sprint_TurningRate = 360.f;
-	Sprint_TurnRateBoost = 3.f;
 }
 
 void UBotaniMM_Walking::GenerateMove_Implementation(
@@ -38,6 +35,7 @@ void UBotaniMM_Walking::GenerateMove_Implementation(
 	// Get the inputs
 	const FCharacterDefaultInputs* MoveKinematicInputs = StartState.InputCmd.InputCollection.FindDataByType<FCharacterDefaultInputs>();
 	const FBotaniMoverInputs* BotaniInputs = StartState.InputCmd.InputCollection.FindDataByType<FBotaniMoverInputs>();
+	const FBotaniMoverAbilityInputs* BotaniAbilityInputs = StartState.InputCmd.InputCollection.FindDataByType<FBotaniMoverAbilityInputs>();
 
 	// Get the sync states
 	const FMoverDefaultSyncState* StartSyncState = StartState.SyncState.SyncStateCollection.FindDataByType<FMoverDefaultSyncState>();
@@ -55,7 +53,7 @@ void UBotaniMM_Walking::GenerateMove_Implementation(
 	FVector UpDirection = BotaniMover->GetUpDirection();
 
 	// Get timings
-	const float DeltaSeconds = TimeStep.StepMs * 0.001f;
+	const float DeltaSeconds = TimeStep.StepMs * BotaniMover::Lazy::MsToS;
 
 	// Start filling up our move params
 	FFloorCheckResult LastFloorResult;
@@ -88,8 +86,18 @@ void UBotaniMM_Walking::GenerateMove_Implementation(
 		IntendedOrientation_WorldSpace = MoveKinematicInputs->GetOrientationIntentDir_WorldSpace().ToOrientationRotator();
 	}
 
+	IntendedOrientation_WorldSpace = UMovementUtils::ApplyGravityToOrientationIntent(IntendedOrientation_WorldSpace, BotaniMover->GetWorldToGravityTransform(), BotaniMovementSettings->bShouldRemainUpright);
+
+	// Draw Normal
+	//DrawDebugLine(GetWorld(), StartSyncState->GetLocation_WorldSpace(), StartSyncState->GetLocation_WorldSpace() + MovementNormal * 100.f, FColor::Blue, false, 1.f, 0, 1.f);
+	// Draw Intended
+	//DrawDebugLine(GetWorld(), StartSyncState->GetLocation_WorldSpace(), StartSyncState->GetLocation_WorldSpace() + IntendedOrientation_WorldSpace.Vector() * 100.f, FColor::Red, false, 0.f, 0, 1.f);
+
 	// Calculate a speed boost scaling so we better retain movement plane speed on steep slopes (up to a point)
 	float SlopeBoost = 1.0f / FMath::Max(FMath::Abs(MovementNormal.Dot(FVector::UpVector)), 0.75f);
+	SlopeBoost = 1.f; //@TODO: This behaves really weird on slopes, so for now we just disable it D:
+	/* @TODO: Technically, I found out that the issue is in UBotaniMovementInputComponent and not here,
+	 so maybe enable SlopeBoost again?? */
 
 	// Start building our ground move params
 	FGroundMoveParams Params;
@@ -116,43 +124,48 @@ void UBotaniMM_Walking::GenerateMove_Implementation(
 	Params.DeltaSeconds = DeltaSeconds;
 	Params.WorldToGravityQuat = BotaniMover->GetWorldToGravityTransform();
 	Params.UpDirection = UpDirection;
-	Params.bUseAccelerationForVelocityMove = CommonLegacySettings->bUseAccelerationForVelocityMove;
+	Params.bUseAccelerationForVelocityMove = BotaniMovementSettings->bUseAccelerationForVelocityIntent;
 
-	const bool bSprinting = BotaniInputs && BotaniInputs->bIsSprintPressed;
+	const bool bSprinting = BotaniAbilityInputs && BotaniAbilityInputs->bIsSprintPressed;
 
 	// Decide whether to use walk or sprinting params
 	if (bSprinting)
 	{
 		// Use the sprinting params
-		Params.TurningRate = Sprint_TurningRate;
-		Params.TurningBoost = Sprint_TurnRateBoost;
-		Params.MaxSpeed = Sprint_MaxSpeed * SlopeBoost;
-		Params.Acceleration = Sprint_Acceleration * SlopeBoost;
-		Params.Deceleration = Sprint_Deceleration;
+		Params.TurningRate = GetBotaniMoverFloatProp(SprintTurningRate);
+		Params.TurningBoost = GetBotaniMoverFloatProp(SprintTurningBoost);
+		Params.MaxSpeed = GetEffectiveMaxSpeed(GetBotaniMoverFloatProp(MaxSprintSpeed) * SlopeBoost, StartState);
+		Params.Acceleration = GetBotaniMoverFloatProp(SprintAcceleration) * SlopeBoost;
+		Params.Deceleration = GetBotaniMoverFloatProp(SprintDeceleration);
 	}
 	else
 	{
 		// Use the default legacy walk params
-		Params.TurningRate = CommonLegacySettings->TurningRate;
-		Params.TurningBoost = CommonLegacySettings->TurningBoost;
-		Params.MaxSpeed = CommonLegacySettings->MaxSpeed /** SlopeBoost*/;
-		Params.Acceleration = CommonLegacySettings->Acceleration /** SlopeBoost*/;
-		Params.Deceleration = CommonLegacySettings->Deceleration;
+		Params.TurningRate = GetBotaniMoverFloatProp(TurningRate);
+		Params.TurningBoost = GetBotaniMoverFloatProp(TurningBoost);
+		Params.MaxSpeed = GetEffectiveMaxSpeed(GetBotaniMoverFloatProp(MaxSpeed) * SlopeBoost, StartState);
+		Params.Acceleration = GetBotaniMoverFloatProp(Acceleration) * SlopeBoost;
+		Params.Deceleration = GetBotaniMoverFloatProp(Deceleration);
 	}
 
+	// Friction
 	// Make sure we don't exceed the max speed
 	if (Params.MoveInput.SizeSquared() > 0.f
 		&& !UMovementUtils::IsExceedingMaxSpeed(Params.PriorVelocity, Params.MaxSpeed))
 	{
 		// Default to regular friction
-		Params.Friction = CommonLegacySettings->GroundFriction;
+		Params.Friction = GetBotaniMoverFloatProp(GroundFriction);
 	}
 	else
 	{
 		// Use the braking friction to slow down back to the max speed
-		Params.Friction = CommonLegacySettings->bUseSeparateBrakingFriction ? CommonLegacySettings->BrakingFriction : CommonLegacySettings->GroundFriction;
-		Params.Friction *= CommonLegacySettings->BrakingFrictionFactor;
+		Params.Friction = BotaniMovementSettings->bUseSeparateBrakingFriction ? GetBotaniMoverFloatProp(BrakingFriction) : GetBotaniMoverFloatProp(GroundFriction);
+		Params.Friction *= GetBotaniMoverFloatProp(BrakingFrictionFactor);
 	}
+
+	//@TODO: Doesn't work in multiplayer, need to figure out how mover handles that
+	//@TODO: Edit, it does work, i just have to stress-test it now
+	ApplyPhysicalGroundFriction(Params, LastFloorResult, false);
 
 	// Output the proposed move
 	OutProposedMove = UGroundMovementUtils::ComputeControlledGroundMove(Params);

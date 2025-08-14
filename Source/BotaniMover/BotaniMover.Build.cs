@@ -4,24 +4,27 @@ using UnrealBuildTool;
 
 public class BotaniMover : ModuleRules
 {
-	public BotaniMover(ReadOnlyTargetRules Target) : base(Target)
+	public BotaniMover(ReadOnlyTargetRules target) : base(target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		
+
 		PublicDependencyModuleNames.AddRange( new []
-		{ 
+		{
 			"Core",
 			"Mover",
 			"CommonMover",
 			"GameplayTags",
-		});
-			
-		
-		PrivateDependencyModuleNames.AddRange( new []
-		{ 
-			"CoreUObject", 
-			"Engine", 
+			"ModularGameplay",
+			"MotionWarping",
 			"GameplayAbilities",
+		});
+
+
+		PrivateDependencyModuleNames.AddRange( new []
+		{
+			"CoreUObject",
+			"Engine",
+			"PhysicsCore",
 		});
 	}
 }

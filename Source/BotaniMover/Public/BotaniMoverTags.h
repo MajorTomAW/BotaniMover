@@ -1,4 +1,4 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
@@ -24,4 +24,11 @@ namespace BotaniGameplayTags::Mover
 	namespace Transitions
 	{
 	}
+
+	namespace Restrictions
+	{
+		BOTANIMOVER_DECLARE(TAG_Restriction_CannotMove)
+	}
 }
+
+#undef BOTANIMOVER_DECLARE

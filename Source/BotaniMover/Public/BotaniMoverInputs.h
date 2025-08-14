@@ -1,4 +1,4 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
@@ -14,23 +14,13 @@ struct FBotaniMoverInputs : public FMoverDataStructBase
 
 public:
 	FBotaniMoverInputs()
-		: bSprintPressedThisFrame(false)
-		, bIsSprintPressed(false)
-		, InvisibleForce(FVector::ZeroVector)
+		: InvisibleForce(FVector::ZeroVector)
 	{
 	}
 
 	virtual ~FBotaniMoverInputs() override {}
 
 public:
-	/** Was the Sprint input pressed this frame? */
-	UPROPERTY(BlueprintReadWrite, Category=Input)
-	bool bSprintPressedThisFrame;
-
-	/** Is the Sprint input currently being pressed aka held down? */
-	UPROPERTY(BlueprintReadWrite, Category=Input)
-	bool bIsSprintPressed;
-
 	/** Invisible force vector applied to the player when moving. */
 	UPROPERTY(BlueprintReadWrite, Category=Input)
 	FVector InvisibleForce;
@@ -42,14 +32,10 @@ public:
 		FBotaniMoverInputs* CopyPtr = new FBotaniMoverInputs(*this);
 		return CopyPtr;
 	}
-	
+
 	virtual bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess) override
 	{
 		Super::NetSerialize(Ar, Map, bOutSuccess);
-
-		// Serialize the digital input flags
-		Ar.SerializeBits(&bSprintPressedThisFrame, 1);
-		Ar.SerializeBits(&bIsSprintPressed, 1);
 
 		// Serialize the invisible force vector
 		Ar << InvisibleForce;
@@ -57,17 +43,17 @@ public:
 		bOutSuccess = true;
 		return true;
 	}
-	
+
 	virtual UScriptStruct* GetScriptStruct() const override
 	{
 		return StaticStruct();
 	}
-	
+
 	virtual void ToString(FAnsiStringBuilderBase& Out) const override
 	{
 		Super::ToString(Out);
 	}
-	
+
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override
 	{
 		Super::AddReferencedObjects(Collector);

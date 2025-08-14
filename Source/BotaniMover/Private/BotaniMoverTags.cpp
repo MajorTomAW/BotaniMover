@@ -20,6 +20,11 @@ namespace BotaniGameplayTags::Mover
 		BOTANIMOVER_DEFINE(TAG_MM_WallRunning, "BotaniMover.Mode.WallRunning", "Wall running mode, used for fast movement along walls.");
 		BOTANIMOVER_DEFINE(TAG_MM_Grappling, "BotaniMover.Mode.Grappling", "Grappling mode, used for fast movement using a grappling hook.");
 	}
+
+	namespace Restrictions
+	{
+		BOTANIMOVER_DEFINE(TAG_Restriction_CannotMove, "Gameplay.Mod.RestrictMovement", "Movement is restricted and the character cannot move.");
+	}
 }
 
 #undef BOTANIMOVER_DEFINE

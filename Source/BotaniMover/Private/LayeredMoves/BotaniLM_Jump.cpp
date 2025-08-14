@@ -1,12 +1,13 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 
 #include "LayeredMoves/BotaniLM_Jump.h"
 
+#include "BotaniCommonMovementSettings.h"
+#include "BotaniMoverSettings.h"
 #include "CommonBlackboard.h"
 #include "CommonMoverComponent.h"
 #include "MoverComponent.h"
-#include "DefaultMovementSet/Settings/CommonLegacyMovementSettings.h"
 #include "MoveLibrary/AirMovementUtils.h"
 #include "MoveLibrary/MovementUtils.h"
 
@@ -40,8 +41,11 @@ bool FBotaniLM_Jump::GenerateMove(
 	FProposedMove& OutProposedMove)
 {
 	// Grab required data
-	const UCommonLegacyMovementSettings* CommonLegacySettings = MoverComp->FindSharedSettings<UCommonLegacyMovementSettings>();
-	check(CommonLegacySettings);
+	const UBotaniCommonMovementSettings* BotaniMovementSettings = MoverComp->FindSharedSettings<UBotaniCommonMovementSettings>();
+	check(BotaniMovementSettings);
+
+	const UBotaniMoverSettings* BotaniMoverSettings = MoverComp->FindSharedSettings<UBotaniMoverSettings>();
+	check(BotaniMoverSettings);
 
 	const FMoverDefaultSyncState* SyncState = StartState.SyncState.SyncStateCollection.FindDataByType<FMoverDefaultSyncState>();
 	check(SyncState);
@@ -53,7 +57,7 @@ bool FBotaniLM_Jump::GenerateMove(
 	const FCharacterDefaultInputs* KinematicInputs = StartState.InputCmd.InputCollection.FindDataByType<FCharacterDefaultInputs>();
 
 	// If we are no longer falling, set the duration to zero
-	if (TimeStep.BaseSimTimeMs != StartSimTimeMs && StartState.SyncState.MovementMode != CommonLegacySettings->AirMovementModeName)
+	if (TimeStep.BaseSimTimeMs != StartSimTimeMs && StartState.SyncState.MovementMode != BotaniMoverSettings->AirMovementModeName)
 	{
 		DurationMs = 0.f;
 	}
@@ -98,7 +102,7 @@ bool FBotaniLM_Jump::GenerateMove(
 	// We can either override move plane velocity with the provided momentum
 	// or grab it from the sync state.
 	FVector NonUpVelocity;
-	
+
 	if (bOverrideHorizontalMomentum)
 	{
 		NonUpVelocity = Momentum - UpVelocity;
@@ -145,16 +149,16 @@ bool FBotaniLM_Jump::GenerateMove(
 
 	// Zero out the vertical component of the move input
 	Params.MoveInput = Params.MoveInput.ProjectOnToNormal(MoverComp->GetUpDirection());
-	
+
 	// Fill in the rest of our move params
 	Params.OrientationIntent = IntendedOrientation_WorldSpace;
 	Params.PriorVelocity = NonUpVelocity + UpVelocity;
 	Params.PriorOrientation = SyncState->GetOrientation_WorldSpace();
 	Params.DeltaSeconds = TimeStep.StepMs * 0.001f;
-	Params.TurningRate = CommonLegacySettings->TurningRate;
-	Params.TurningBoost = CommonLegacySettings->TurningBoost;
-	Params.MaxSpeed = CommonLegacySettings->MaxSpeed;
-	Params.Acceleration = CommonLegacySettings->Acceleration;
+	Params.TurningRate = GetBotaniMoverFloatProp(TurningRate);
+	Params.TurningBoost = GetBotaniMoverFloatProp(TurningBoost);
+	Params.MaxSpeed = GetBotaniMoverFloatProp(MaxSpeed);
+	Params.Acceleration = GetBotaniMoverFloatProp(Acceleration);
 	Params.Deceleration = 0.0f;
 
 	if (MixMode == EMoveMixMode::OverrideVelocity)

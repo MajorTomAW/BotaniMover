@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "Botani Mover",
-	"Description": "",
+	"Description": "Mover implementation for movement modes (such as Wall Running, Vaulting, Ziplining) in the Botani Game.",
 	"Category": "Gameplay.Botani",
 	"CreatedBy": "MajorT",
 	"CreatedByURL": "",
@@ -32,6 +32,10 @@
 		},
 		{
 			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "ModularGameplay",
 			"Enabled": true
 		}
 	]

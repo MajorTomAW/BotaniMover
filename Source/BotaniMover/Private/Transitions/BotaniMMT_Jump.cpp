@@ -1,17 +1,17 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 
 #include "Transitions/BotaniMMT_Jump.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
+#include "BotaniCommonMovementSettings.h"
+#include "BotaniMoverAbilityInputs.h"
 #include "CommonBlackboard.h"
 #include "GameplayTagSyncState.h"
 #include "MoverComponent.h"
 #include "MoverDataModelTypes.h"
 #include "MoverSimulationTypes.h"
 #include "Abilities/GameplayAbilityTypes.h"
-#include "DefaultMovementSet/Settings/CommonLegacyMovementSettings.h"
-#include "LayeredMoves/BotaniLM_Jump.h"
 #include "LayeredMoves/BotaniLM_MultiJump.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 
@@ -21,27 +21,22 @@
 UBotaniMMT_Jump::UBotaniMMT_Jump(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	JumpMovementMode = DefaultModeNames::Falling;
 	bJumpWhenButtonPressed = true;
-	bRequireGround = true;
-	bTruncateOnJumpRelease = true;
-	bOverrideMovementPlaneVelocity = false;
-	bOverrideVerticalVelocity = true;
-	bAddFloorVelocity = true;
-	bKeepPreviousVelocity = true;
-	bKeepPreviousVerticalVelocity = true;
 }
 
 FTransitionEvalResult UBotaniMMT_Jump::Evaluate_Implementation(
 	const FSimulationTickParams& Params) const
 {
 	// Get the inputs
-	const FCharacterDefaultInputs* KinematicInputs = Params.StartState.InputCmd.InputCollection.FindDataByType<FCharacterDefaultInputs>();
+	const FBotaniMoverAbilityInputs* BotaniAbilityInputs =
+		Params.StartState.InputCmd.InputCollection.FindDataByType<FBotaniMoverAbilityInputs>();
 
 	// Do we care about jump button state?
-	if (bJumpWhenButtonPressed && KinematicInputs)
+	if (bJumpWhenButtonPressed && BotaniAbilityInputs)
 	{
 		// Check if jump was just pressed this frame
-		if (!KinematicInputs->bIsJumpJustPressed)
+		if (!BotaniAbilityInputs->bJumpPressedThisFrame)
 		{
 			return FTransitionEvalResult::NoTransition;
 		}
@@ -60,6 +55,9 @@ FTransitionEvalResult UBotaniMMT_Jump::Evaluate_Implementation(
 		}
 	}
 
+	// Get the botani movement settings
+	const UBotaniCommonMovementSettings* BotaniMovementSettings = Params.MovingComps.MoverComponent->FindSharedSettings<UBotaniCommonMovementSettings>();
+
 	// Get the blackboard
 	const UMoverBlackboard* SimBlackboard = Params.MovingComps.MoverComponent->GetSimBlackboard();
 
@@ -70,13 +68,13 @@ FTransitionEvalResult UBotaniMMT_Jump::Evaluate_Implementation(
 		{
 			// Check if we are jumping too fast/soon
 			const float TimeSinceLastJump = Params.TimeStep.BaseSimTimeMs - LastJumpTime;
-			if (TimeSinceLastJump < MinTimeBetweenJumps * 1000.f)
+			if (TimeSinceLastJump < GetBotaniMoverFloatProp(MinTimeBetweenJumps) * 1000.f)
 			{
 				return FTransitionEvalResult::NoTransition;
 			}
 		}
 
-		if (bRequireGround)
+		if (BotaniMovementSettings->bJumpRequiresGround)
 		{
 			// Get the current floor check result
 			FFloorCheckResult CurrentFloor;
@@ -88,13 +86,13 @@ FTransitionEvalResult UBotaniMMT_Jump::Evaluate_Implementation(
 			// ...unless we are coyote !!!
 			if (!bValidFloor || !CurrentFloor.IsWalkableFloor())
 			{
-				if (CoyoteTime > 0.f)
+				if (GetBotaniMoverFloatProp(CoyoteTime) > 0.f)
 				{
 					float LastFallTime = 0.f;
 					if (SimBlackboard->TryGet(CommonBlackboard::LastFallTime, LastFallTime))
 					{
 						const float TimeSinceFall = Params.TimeStep.BaseSimTimeMs - LastFallTime;
-						if (TimeSinceFall > CoyoteTime * 1000.f)
+						if (TimeSinceFall > GetBotaniMoverFloatProp(CoyoteTime) * 1000.f)
 						{
 							return FTransitionEvalResult::NoTransition;
 						}
@@ -120,8 +118,8 @@ void UBotaniMMT_Jump::Trigger_Implementation(
 	const FSimulationTickParams& Params)
 {
 	// Get the movement settings
-	const UCommonLegacyMovementSettings* CommonLegacySettings = Params.MovingComps.MoverComponent->FindSharedSettings<UCommonLegacyMovementSettings>();
-	check(CommonLegacySettings);
+	const UBotaniCommonMovementSettings* BotaniMovementSettings = Params.MovingComps.MoverComponent->FindSharedSettings<UBotaniCommonMovementSettings>();
+	check(BotaniMovementSettings);
 
 	// Get the sync state tags
 	const FGameplayTagsSyncState* TagsState = Params.StartState.SyncState.SyncStateCollection.FindDataByType<FGameplayTagsSyncState>();
@@ -145,7 +143,7 @@ void UBotaniMMT_Jump::Trigger_Implementation(
 				// so save the last falling time to the blackboard
 				SimBlackboard->Set(CommonBlackboard::LastFallTime, Params.TimeStep.BaseSimTimeMs);
 
-				if (bAddFloorVelocity && CurrentFloor.HitResult.GetActor())
+				if (bJumpAddsFloorVelocity.Get(BotaniMovementSettings->bJumpAddsFloorVelocity) && CurrentFloor.HitResult.GetActor())
 				{
 					// Add the floor velocity to the inherited velocity
 					InheritedVelocity = CurrentFloor.HitResult.GetActor()->GetVelocity();
@@ -158,37 +156,40 @@ void UBotaniMMT_Jump::Trigger_Implementation(
 	}
 
 	// Preserve any momentum from our current base
-	FVector ClampedVelocity = bKeepPreviousVelocity
+	FVector ClampedVelocity = bJumpKeepsPreviousVelocity.Get(BotaniMovementSettings->bJumpKeepsPreviousVelocity)
 		? Params.MovingComps.UpdatedComponent->GetComponentVelocity()
 		: FVector::ZeroVector;
 
 	// Should we reset the vertical velocity?
-	if (!bKeepPreviousVerticalVelocity)
+	if (!bJumpKeepsPreviousVerticalVelocity.Get(BotaniMovementSettings->bJumpKeepsPreviousVerticalVelocity))
 	{
 		ClampedVelocity = FVector::VectorPlaneProject(ClampedVelocity, Params.MovingComps.MoverComponent->GetUpDirection());
 		//ClampedVelocity.Z = 0.f; // Reset the vertical component
 	}
 
-	if (MaxPreviousVelocity >= 0.f)
+	if (GetBotaniMoverFloatProp(MaxJumpPreviousVelocity) >= 0.f)
 	{
-		ClampedVelocity = ClampedVelocity.GetClampedToMaxSize(MaxPreviousVelocity);
+		ClampedVelocity = ClampedVelocity.GetClampedToMaxSize(GetBotaniMoverFloatProp(MaxJumpPreviousVelocity));
 	}
 
 	InheritedVelocity += ClampedVelocity;
 
 	// Choose the vertical impulse to use
-	const float UpwardsSpeed = VerticalImpulse + (TagsState->HasTagExact(ExtraVerticalImpulseTag) ? ExtraVerticalImpulse : 0.0f);
+	const float UpwardsSpeed =
+		GetBotaniMoverFloatProp(JumpVerticalImpulse) +
+		(TagsState->HasTagExact(BotaniMovementSettings->ExtraJumpVerticalImpulseTag)
+			? GetBotaniMoverFloatProp(ExtraJumpVerticalImpulse)
+			: 0.0f);
 
 	// Create the jump layered move
-	//TSharedPtr<FBotaniLM_Jump> JumpMove = MakeShared<FBotaniLM_Jump>();
 	TSharedPtr<FBotaniLM_MultiJump> JumpMove = MakeShared<FBotaniLM_MultiJump>();
 	JumpMove->UpwardsSpeed = UpwardsSpeed;
 	JumpMove->Momentum = InheritedVelocity;
-	JumpMove->AirControl = AirControl;
-	JumpMove->DurationMs = HoldTime * 1000.0f;
-	JumpMove->bTruncateOnJumpRelease = bTruncateOnJumpRelease;
-	JumpMove->bOverrideHorizontalMomentum = bOverrideMovementPlaneVelocity;
-	JumpMove->bOverrideVerticalMomentum = bOverrideVerticalVelocity;
+	JumpMove->AirControl = GetBotaniMoverFloatProp(JumpAirControlPct);
+	JumpMove->DurationMs = GetBotaniMoverFloatProp(JumpHoldTime) * 1000.0f;
+	JumpMove->bTruncateOnJumpRelease = BotaniMovementSettings->bTruncateOnJumpRelease;
+	JumpMove->bOverrideHorizontalMomentum = bJumpOverridesMovementPlaneVelocity.Get(BotaniMovementSettings->bJumpOverridesMovementPlaneVelocity);
+	JumpMove->bOverrideVerticalMomentum = bJumpOverridesVerticalVelocity.Get(BotaniMovementSettings->bJumpOverridesVerticalVelocity);
 
 	JumpMove->FinishVelocitySettings.FinishVelocityMode = ELayeredMoveFinishVelocityMode::MaintainLastRootMotionVelocity;
 

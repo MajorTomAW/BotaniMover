@@ -1,4 +1,4 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
@@ -49,7 +49,7 @@ public:
 
 	/** If true, the layered move will override the vertical velocity with the provided Momentum */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Mover)
-	bool bOverrideVerticalMomentum; 
+	bool bOverrideVerticalMomentum;
 };
 
 template<>

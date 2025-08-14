@@ -1,9 +1,10 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 
 #include "Modes/BotaniMM_Falling.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
+#include "BotaniCommonMovementSettings.h"
 #include "BotaniMoverInputs.h"
 #include "BotaniMoverLogChannels.h"
 #include "BotaniMoverSettings.h"
@@ -26,20 +27,24 @@ UBotaniMM_Falling::UBotaniMM_Falling(const FObjectInitializer& ObjectInitializer
 
 	bCancelVerticalSpeedOnLanding = false;
 	EffectiveVelocity = FVector::ZeroVector;
+
 	ModeTag = BotaniGameplayTags::Mover::Modes::TAG_MM_Falling;
+	GameplayTags.AddTag(Mover_IsInAir);
+	GameplayTags.AddTag(Mover_IsFalling);
+	GameplayTags.AddTag(Mover_SkipAnimRootMotion);
 }
 
 void UBotaniMM_Falling::Deactivate()
 {
 	Super::Deactivate();
 
-	// Invalidate blackboard keys
+	/*// Invalidate blackboard keys @TODO: But why clear it, might still need it for cooldowns or other calcs
 	UMoverBlackboard* Blackboard = GetMoverComponent<UMoverComponent>()->GetSimBlackboard_Mutable();
 	if (IsValid(Blackboard))
 	{
-		Blackboard->Invalidate(BotaniMover::Blackboard::NAME_LastFallTime);
-		Blackboard->Invalidate(BotaniMover::Blackboard::NAME_LastGrappleTime);
-	}
+		Blackboard->Invalidate(BotaniMover::Blackboard::LastFallTime);
+		Blackboard->Invalidate(BotaniMover::Blackboard::LastGrappleTime);
+	}*/
 }
 
 void UBotaniMM_Falling::GenerateMove_Implementation(
@@ -79,12 +84,12 @@ void UBotaniMM_Falling::GenerateMove_Implementation(
 	float LastFallTime = 0.f;
 	float TimeFalling = 1000.f;
 
-	if (Blackboard->TryGet(BotaniMover::Blackboard::NAME_LastFallTime, LastFallTime))
+	if (Blackboard->TryGet(BotaniMover::Blackboard::LastFallTime, LastFallTime))
 	{
 		TimeFalling = (TimeStep.BaseSimTimeMs - LastFallTime) * 0.001f;
 	}
 
-	// We don't want velocity limits to take the falling velocity component into account, since it is handled 
+	// We don't want velocity limits to take the falling velocity component into account, since it is handled
 	// separately by the terminal velocity of the environment.
 	const FVector StartVelocity = StartSyncState->GetVelocity_WorldSpace();
 	const FVector StartHorizontalVelocity = FVector::VectorPlaneProject(StartVelocity, UpDirection);
@@ -134,27 +139,27 @@ void UBotaniMM_Falling::GenerateMove_Implementation(
 	Params.DeltaSeconds = DeltaSeconds;
 
 	// Default to regular falling params
-	float AirControl = AirControlPercentage;
+	float AirControl = GetBotaniMoverFloatProp(AirControlPct);
 
 	//@TODO: bGliding, bSkydiving, bGrappling, bFalling
 	if (bGliding)
 	{
-		
+
 	}
 	else if (bSkydiving)
 	{
-		
+
 	}
 	else
 	{
 		// Default to regular falling params
-		Params.TurningRate = CommonLegacySettings->TurningRate;
-		Params.TurningBoost = CommonLegacySettings->TurningBoost;
-		Params.MaxSpeed = CommonLegacySettings->MaxSpeed;
-		Params.Acceleration = CommonLegacySettings->Acceleration;
-		Params.Deceleration = CommonLegacySettings->Deceleration;
+		Params.TurningRate = GetBotaniMoverFloatProp(TurningRate);
+		Params.TurningBoost = GetBotaniMoverFloatProp(TurningBoost);
+		Params.MaxSpeed = GetBotaniMoverFloatProp(MaxSpeed);
+		Params.Acceleration = GetBotaniMoverFloatProp(Acceleration);
+		Params.Deceleration = GetBotaniMoverFloatProp(FallingDeceleration);
 		Params.WorldToGravityQuat = BotaniMover->GetWorldToGravityTransform();
-		Params.bUseAccelerationForVelocityMove = CommonLegacySettings->bUseAccelerationForVelocityMove;
+		Params.bUseAccelerationForVelocityMove = BotaniMovementSettings->bUseAccelerationForVelocityIntent;
 	}
 
 	// Apply the air control
@@ -163,14 +168,14 @@ void UBotaniMM_Falling::GenerateMove_Implementation(
 	if (!bGliding)
 	{
 		// Do we want to move towards our velocity while over horizontal terminal velocity?
-		if (Params.MoveInput.Dot(StartVelocity) > 0.f && StartHorizontalVelocity.Size() >= TerminalMovementPlaneSpeed)
+		if (Params.MoveInput.Dot(StartVelocity) > 0.f && StartHorizontalVelocity.Size() >= GetBotaniMoverFloatProp(TerminalMovementPlaneSpeed))
 		{
 			// Project the input into the movement plane defined by the velocity
 			const FPlane MovementNormalPlane(StartVelocity, StartVelocity.GetSafeNormal());
 			Params.MoveInput = Params.MoveInput.ProjectOnTo(MovementNormalPlane);
 
 			// Use the horizontal terminal velocity deceleration so we break faster
-			Params.Deceleration = OverTerminalSpeedFallingDeceleration;
+			Params.Deceleration = GetBotaniMoverFloatProp(OverTerminalSpeedFallingDeceleration);
 		}
 	}
 
@@ -200,22 +205,22 @@ void UBotaniMM_Falling::GenerateMove_Implementation(
 
 	// If we are going faster than the TerminalVerticalVelocity apply a VerticalFallingDeceleration,
 	// otherwise reset Z velocity to before we applied deceleration
-	if (VelocityWithGravity.GetAbs().Dot(UpDirection) > TerminalVerticalSpeed)
+	if (VelocityWithGravity.GetAbs().Dot(UpDirection) > GetBotaniMoverFloatProp(TerminalVerticalSpeed))
 	{
-		if (bShouldClampTerminalVerticalSpeed)
+		if (BotaniMovementSettings->bShouldClampTerminalVerticalSpeed)
 		{
 			// Clamp the vertical speed to the terminal speed
-			const float ClampedVerticalSpeed = FMath::Sign(VelocityWithGravity.Dot(UpDirection)) * TerminalVerticalSpeed;
+			const float ClampedVerticalSpeed = FMath::Sign(VelocityWithGravity.Dot(UpDirection)) * GetBotaniMoverFloatProp(TerminalVerticalSpeed);
 			UMovementUtils::SetGravityVerticalComponent(OutProposedMove.LinearVelocity, ClampedVerticalSpeed, UpDirection);
 		}
 		else
 		{
 			// Apply deceleration to the vertical component of the velocity
-			float DesiredDeceleration = FMath::Abs(TerminalVerticalSpeed - VelocityWithGravity.GetAbs().Dot(UpDirection)) / DeltaSeconds;
-			float DecelerationToApply = FMath::Min(DesiredDeceleration, VerticalFallingDeceleration);
+			float DesiredDeceleration = FMath::Abs(GetBotaniMoverFloatProp(TerminalVerticalSpeed) - VelocityWithGravity.GetAbs().Dot(UpDirection)) / DeltaSeconds;
+			float DecelerationToApply = FMath::Min(DesiredDeceleration, GetBotaniMoverFloatProp(VerticalFallingDeceleration));
 			DecelerationToApply = FMath::Sign(VelocityWithGravity.Dot(UpDirection)) * DecelerationToApply * DeltaSeconds;
 			FVector MaxUpDirVelocity = VelocityWithGravity * UpDirection - (UpDirection * DecelerationToApply);
-			
+
 			UMovementUtils::SetGravityVerticalComponent(
 				OutProposedMove.LinearVelocity,
 				MaxUpDirVelocity.Dot(UpDirection),
@@ -248,7 +253,7 @@ bool UBotaniMM_Falling::PrepareSimulationData(const FSimulationTickParams& Param
 void UBotaniMM_Falling::ApplyMovement(FMoverTickEndData& OutputState)
 {
 	UMoverComponent* MoverComponent = GetMoverComponent();
-	
+
 	// Initialize our fall data
 	FCommonMoveData FallData;
 	FallData.MoveRecord.SetDeltaSeconds(DeltaTime);
@@ -318,15 +323,15 @@ void UBotaniMM_Falling::ApplyMovement(FMoverTickEndData& OutputState)
 			MovingComponentSet,
 			MovingComponentSet.UpdatedPrimitive->GetComponentLocation(),
 			FallData.MoveHitResult,
-			CommonLegacySettings->FloorSweepDistance,
-			CommonLegacySettings->MaxWalkSlopeCosine,
+			BotaniMovementSettings->FloorSweepDistance,
+			BotaniMovementSettings->MaxWalkSlopeAngleCosine.GetValue(),
 			LandingFloor))
 		{
 			// Try to adjust our location so we don't get stuck in the floor
 			UGroundMovementUtils::TryMoveToAdjustHeightAboveFloor(
 				MoverComponent,
 				LandingFloor,
-				CommonLegacySettings->MaxWalkSlopeCosine,
+				BotaniMovementSettings->MaxWalkSlopeAngleCosine.GetValue(),
 				FallData.MoveRecord);
 
 			CaptureFinalState(LandingFloor, DeltaTime * FallData.PercentTimeAppliedSoFar, OutputState, FallData.MoveRecord);
@@ -350,8 +355,8 @@ void UBotaniMM_Falling::ApplyMovement(FMoverTickEndData& OutputState)
 			FallData.MoveHitResult.Normal,
 			FallData.MoveHitResult,
 			true,
-			CommonLegacySettings->FloorSweepDistance,
-			CommonLegacySettings->MaxWalkSlopeCosine,
+			BotaniMovementSettings->FloorSweepDistance,
+			BotaniMovementSettings->MaxWalkSlopeAngleCosine.GetValue(),
 			LandingFloor,
 			FallData.MoveRecord);
 
@@ -365,7 +370,7 @@ void UBotaniMM_Falling::ApplyMovement(FMoverTickEndData& OutputState)
 			UGroundMovementUtils::TryMoveToAdjustHeightAboveFloor(
 				MoverComponent,
 				LandingFloor,
-				CommonLegacySettings->MaxWalkSlopeCosine,
+				BotaniMovementSettings->MaxWalkSlopeAngleCosine.GetValue(),
 				FallData.MoveRecord);
 
 			// Capture the final state and handle landing
@@ -394,14 +399,14 @@ void UBotaniMM_Falling::PostMove(FMoverTickEndData& OutputState)
 
 	if (IsValid(SimBlackboard))
 	{
-		if (SimBlackboard->TryGet<float>(BotaniMover::Blackboard::NAME_LastFallTime, LastFallTime))
+		if (SimBlackboard->TryGet<float>(BotaniMover::Blackboard::LastFallTime, LastFallTime))
 		{
 			TimeFalling = CurrentSimulationTime - LastFallTime;
 		}
 
-		if (SimBlackboard->TryGet<float>(BotaniMover::Blackboard::NAME_LastJumpTime, LastJumpTime))
+		if (SimBlackboard->TryGet<float>(BotaniMover::Blackboard::LastJumpTime, LastJumpTime))
 		{
-			
+
 		}
 	}
 }
@@ -414,6 +419,9 @@ void UBotaniMM_Falling::CaptureFinalState(
 {
 	const FVector FinalLocation = MovingComponentSet.UpdatedPrimitive->GetComponentLocation();
 
+	// Save the current time as the last fall time
+	SimBlackboard->Set<float>(BotaniMover::Blackboard::LastFallTime, CurrentSimulationTime);
+
 	// Check for refunds
 	// If we have this amount of time (or more) remaining, give it to the next simulation step.
 	constexpr float MinRemainingSecondsToRefund = 0.0001f;
@@ -421,7 +429,7 @@ void UBotaniMM_Falling::CaptureFinalState(
 	if ((DeltaTime - DeltaSecondsUsed) >= MinRemainingSecondsToRefund)
 	{
 		const float PctOfTimeRemaining = (1.f - (DeltaSecondsUsed / DeltaTime));
-		TickEndData.MovementEndState.RemainingMs = PctOfTimeRemaining * DeltaTime * 1000.f;
+		TickEndData.MovementEndState.RemainingMs = PctOfTimeRemaining * DeltaTime * BotaniMover::Lazy::SToMs;
 	}
 	else
 	{
@@ -494,7 +502,7 @@ void UBotaniMM_Falling::ProcessLanded(
 		}
 
 		// Switch to ground movement mode (usually walking) and cache any floor / movement base info
-		NextMovementMode = CommonLegacySettings->GroundMovementModeName;
+		NextMovementMode = BotaniMoverSettings->GroundMovementModeName;
 		SimBlackboard->Set(CommonBlackboard::LastFloorResult, FloorResult);
 
 		if (UBasedMovementUtils::IsADynamicBase(FloorResult.HitResult.GetComponent()))
@@ -508,7 +516,7 @@ void UBotaniMM_Falling::ProcessLanded(
 
 	// This would also be a good spot for implementing some falling physics interactions
 	// (i.e., falling into a movable object and pushing it based off of this actors' velocity)
-	
+
 	// If a new mode was set, go ahead and switch to it after this tick and broadcast we landed
 	if (!NextMovementMode.IsNone())
 	{

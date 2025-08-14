@@ -1,4 +1,4 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
@@ -7,8 +7,8 @@
 #include "BotaniMM_Walking.generated.h"
 
 /** Walking mode for Botani game. */
-UCLASS(DisplayName="Botani: Walking Mode")
-class BOTANIMOVER_API UBotaniMM_Walking : public UBotaniMM_GroundBase
+UCLASS(DisplayName="Botani MM: Walking Mode", MinimalAPI)
+class UBotaniMM_Walking : public UBotaniMM_GroundBase
 {
 	GENERATED_BODY()
 
@@ -32,33 +32,9 @@ protected:
 	//~ End UCommonMovementMode Interface
 
 protected:
-	/** Slope boost multiplier for the walking mode. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Walking, meta=(ClampMin=0.0, UIMin=0.0))
-	float SlopeBoostMultiplier;
-	
 	/** Gameplay Tag to use when sprinting. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Tags)
 	FGameplayTag SprintingTag;
-	
-	/** Maximum ground speed while sprinting. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Sprinting, meta=(ClampMin=0.0, UIMin=0.0, ForceUnits="cm/s"))
-	float Sprint_MaxSpeed;
-
-	/** Maximum ground acceleration while sprinting. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Sprinting, meta=(ClampMin=0.0, UIMin=0.0, ForceUnits="cm/s^2"))
-	float Sprint_Acceleration;
-
-	/** Maximum ground deceleration while sprinting. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Sprinting, meta=(ClampMin=0.0, UIMin=0.0, ForceUnits="cm/s^2"))
-	float Sprint_Deceleration;
-
-	/** Maximum ground turning rate while sprinting. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Sprinting, meta=(ClampMin=0.0, UIMin=0.0, ForceUnits="deg/s"))
-	float Sprint_TurningRate;
-
-	/** Maximum ground turn rate boost while sprinting. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Sprinting, meta=(ClampMin=0.0, UIMin=0.0, ForceUnits="deg/s"))
-	float Sprint_TurnRateBoost;
 
 	/** Gameplay Event to send to the owner when the player starts sprinting. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Events)

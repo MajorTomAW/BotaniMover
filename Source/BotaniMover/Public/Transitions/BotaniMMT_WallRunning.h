@@ -1,4 +1,4 @@
-﻿// Copyright © 2025 Playton. All Rights Reserved.
+﻿// Author: Tom Werner (MajorT), 2025
 
 #pragma once
 
@@ -12,13 +12,14 @@
 
 
 /** Movement Mode Transition that handles transitioning into Wall Running if any walls nearby. */
-UCLASS(DisplayName="Botani MMT: Wall Running")
-class UBotaniMMT_WallRunning : public UBaseMovementModeTransition
+class UE_DEPRECATED_FORGAME(5.6, "Consider using UBotaniMMT_IntoWallRunning or UBotaniMMT_OutOfWallRunning instead.") UDEPRECATED_BotaniMMT_WallRunning;
+UCLASS(Deprecated="Consider using UBotaniMMT_IntoWallRunning or UBotaniMMT_OutOfWallRunning instead.")
+class UDEPRECATED_BotaniMMT_WallRunning : public UBaseMovementModeTransition
 {
 	GENERATED_BODY()
 
 public:
-	UBotaniMMT_WallRunning(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	UDEPRECATED_BotaniMMT_WallRunning(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	//~ Begin UBaseMovementModeTransition Interface
 	virtual FTransitionEvalResult Evaluate_Implementation(const FSimulationTickParams& Params) const override;
