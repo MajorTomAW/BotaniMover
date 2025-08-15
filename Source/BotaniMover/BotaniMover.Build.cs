@@ -26,5 +26,7 @@ public class BotaniMover : ModuleRules
 			"Engine",
 			"PhysicsCore",
 		});
+
+		SetupGameplayDebuggerSupport(target);
 	}
 }
