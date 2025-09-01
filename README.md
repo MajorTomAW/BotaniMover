@@ -6,9 +6,10 @@ This plugin contains (or will contain) all my work with Mover that I use within 
 
 Here a preview video which I also shared in the Unreal Source discord.
 
-
 https://github.com/user-attachments/assets/853f75c4-decb-42f7-98f0-98ea53a26e3f
 
+# Disclaimer
+This plugin does **neither** include the player **nor** the mover input producer as those are very specific for my project.  
 
 
 # Overview
